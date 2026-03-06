@@ -6,59 +6,72 @@ import pandas as pd
 from sqlalchemy import create_engine
 
 from tqdm.auto import tqdm
+import click
 
-year = 2021
-month = 1
-
-pg_user = 'root'
-pg_pass = 'root'
-pg_host = 'localhost'
-pg_port = 5432
-pg_db = 'ny_taxi'
-
-target_table = 'yellow_taxi_date'
-
-chunksize = 100000
-
-prefix = 'https://github.com/DataTalksClub/nyc-tlc-data/releases/download/yellow/'
-url = f'{prefix}/yellow_tripdata_{year}-{month:02d}.csv.gz'
-engine = create_engine(f'postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}')
-
-dtype = {
-    "VendorID": "Int64",
-    "passenger_count": "Int64",
-    "trip_distance": "float64",
-    "RatecodeID": "Int64",
-    "store_and_fwd_flag": "string",
-    "PULocationID": "Int64",
-    "DOLocationID": "Int64",
-    "payment_type": "Int64",
-    "fare_amount": "float64",
-    "extra": "float64",
-    "mta_tax": "float64",
-    "tip_amount": "float64",
-    "tolls_amount": "float64",
-    "improvement_surcharge": "float64",
-    "total_amount": "float64",
-    "congestion_surcharge": "float64"
+SCHEMAS = {
+    'taxi': {
+        'dtype': {
+        "VendorID": "Int64",
+        "passenger_count": "Int64",
+        "trip_distance": "float64",
+        "RatecodeID": "Int64",
+        "store_and_fwd_flag": "string",
+        "PULocationID": "Int64",
+        "DOLocationID": "Int64",
+        "payment_type": "Int64",
+        "fare_amount": "float64",
+        "extra": "float64",
+        "mta_tax": "float64",
+        "tip_amount": "float64",
+        "tolls_amount": "float64",
+        "improvement_surcharge": "float64",
+        "total_amount": "float64",
+        "congestion_surcharge": "float64"
+        },
+        'parse_dates': [
+        "tpep_pickup_datetime",
+        "tpep_dropoff_datetime"
+        ]
+    },
+    'zones': {
+        dtype: {
+        'Zone': "string",
+        'service_zone': "string",
+        },
+        parse_dates: []
+        },
 }
 
-parse_dates = [
-    "tpep_pickup_datetime",
-    "tpep_dropoff_datetime"
-]
 
-df_iter = pd.read_csv(
-    prefix + 'yellow_tripdata_2021-01.csv.gz',
-    dtype=dtype,
-    parse_dates=parse_dates,
+@click.command()
+@click.option('--pg-user', default='root', help='PostgreSQL user')
+@click.option('--pg-pass', default='root', help='PostgreSQL password')
+@click.option('--pg-host', default='localhost', help='PostgreSQL host')
+@click.option('--pg-port', default=5432, type=int, help='PostgreSQL port')
+@click.option('--pg-db', default='ny_taxi', help='PostgreSQL database name')
+@click.option('--source-url', default='', help='Source data in csv format')
+@click.option('--target-table', default='yellow_taxi_data', help='Target table name')
+@click.option('--year', default=2021, help='year of data')
+@click.option('--month', default=1, help='number of month of data')
+@click.option('--chunksize', default=100000, help='number of rows in one chunk')
+def run(pg_user, pg_pass, pg_host, pg_port, pg_db, url, target_table, year, month, chunksize):
+    # for taxi url customized
+    if url:
+        schema = SCHEMAS['zones']
+    else:
+        schema = SCHEMAS['taxi']
+        prefix = 'https://github.com/DataTalksClub/nyc-tlc-data/releases/download/yellow/'
+        url = f'{prefix}/yellow_tripdata_{year}-{month:02d}.csv.gz'
+
+    engine = create_engine(f'postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}')
+
+    df_iter = pd.read_csv(
+    url,
+    dtype=schema['dtype'],
+    parse_dates=schema['parse_dates'],
     iterator=True,
     chunksize=chunksize
 )
-
-
-#df.head(0).to_sql(name='yellow_taxi_date', con=engine, if_exists='replace')
-def run():
     first = True
     for df_chunk in tqdm(df_iter):
         if first:
